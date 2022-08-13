@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ローカル画面共有</title>
+</head>
+
+<body>
+    <div class="parent">
+        <h1>MediaRecorderで画面録画してWebSocketで他のブラウザに流す</h1>
+        <button id="send_button">画面録画を送信する</button>
+        <video id="video_element" width="320" height="180" muted autoplay />
+    </div>
+</body>
+
+<style>
+    .parent {
+        display: flex;
+        align-items: flex-start;
+        flex-direction: column;
+    }
+</style>
+
+<script>
+    // @ts-check
+
+    // Blobの生成回数
+    const INTERVAL = 5_000
+
+    // WebSocket から流れてきた Blob
+    const blobList = []
+
+    // データを受け取ったら video で再生
+    const videoElement = document.getElementById('video_element')
+    // WebSocket 接続
+    const socket = new WebSocket('ws://localhost:8080/capture')
+    socket.onmessage = (ev) => {
+        blobList.push(ev.data)
+        const blob = new Blob(blobList, { 'type': 'video/webm' })
+        const videoUrl = window.URL.createObjectURL(blob)
+        // 前回の BlobUrl のリソースを開放する
+        // 再生位置を控える
+        const prevPos = videoElement.currentTime
+        window.URL.revokeObjectURL(videoElement.src)
+        // セットし直す
+        videoElement.src = videoUrl
+        videoElement.currentTime = prevPos
+    }
+
+    // 画面共有を開始する
+    // 録画内容をWebSocketで流す
+    const record = async () => {
+        const result = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true })
+        // MediaRecorder
+        const recorder = new MediaRecorder(result)
+        recorder.ondataavailable = (ev) => {
+            socket.send(ev.data)
+        }
+        recorder.start(INTERVAL)
+    }
+
+    // 録画ボタンを押したら 画面録画 を開始する
+    const recordButton = document.getElementById('send_button')
+    recordButton.onclick = () => { record() }
+
+</script>
+
+</html>
